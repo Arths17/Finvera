@@ -1,72 +1,108 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import TransactionsManager from "@/components/transactions/transactions-manager";
 
-function amountPrefix(type: "INCOME" | "EXPENSE") {
-  return type === "INCOME" ? "+" : "-";
+type SerializedTransaction = {
+  id: string;
+  type: "INCOME" | "EXPENSE";
+  amount: string;
+  description: string | null;
+  merchant: string | null;
+  occurredAt: string;
+  importedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  category: {
+    id: string;
+    name: string;
+  };
+};
+
+type SerializedCategory = {
+  id: string;
+  name: string;
+};
+
+type TransactionsPageProps = {
+  searchParams?: {
+    categoryId?: string | string[];
+  };
+};
+
+function serializeTransaction(transaction: Awaited<ReturnType<typeof prisma.transaction.findMany>>[number]): SerializedTransaction {
+  return {
+    id: transaction.id,
+    type: transaction.type,
+    amount: transaction.amount.toString(),
+    description: transaction.description,
+    merchant: transaction.merchant,
+    occurredAt: transaction.occurredAt.toISOString(),
+    importedAt: transaction.importedAt?.toISOString() ?? null,
+    createdAt: transaction.createdAt.toISOString(),
+    updatedAt: transaction.updatedAt.toISOString(),
+    category: {
+      id: transaction.category.id,
+      name: transaction.category.name
+    }
+  };
 }
 
-export default async function TransactionsPage() {
+function getQueryValue(value: string | string[] | undefined) {
+  if (Array.isArray(value)) {
+    return value[0] ?? "";
+  }
+
+  return value ?? "";
+}
+
+export default async function TransactionsPage({ searchParams }: TransactionsPageProps) {
   const session = await auth();
 
   if (!session?.user?.id) {
     return null;
   }
 
-  const transactions = await prisma.transaction.findMany({
+  const categories = await prisma.category.findMany({
     where: {
       userId: session.user.id
+    },
+    select: {
+      id: true,
+      name: true
+    },
+    orderBy: {
+      name: "asc"
+    }
+  });
+
+  const requestedCategoryId = getQueryValue(searchParams?.categoryId);
+  const selectedCategoryId = categories.some((category) => category.id === requestedCategoryId)
+    ? requestedCategoryId
+    : "";
+
+  const transactions = await prisma.transaction.findMany({
+    where: {
+      userId: session.user.id,
+      ...(selectedCategoryId ? { categoryId: selectedCategoryId } : {})
     },
     include: {
       category: {
         select: {
-          name: true,
-          color: true
+          id: true,
+          name: true
         }
       }
     },
     orderBy: {
       occurredAt: "desc"
-    },
-    take: 20
+    }
   });
 
   return (
-    <section className="space-y-8">
-      <div className="space-y-3">
-        <p className="text-sm uppercase tracking-[0.18em] text-emerald-300">Transactions</p>
-        <h1 className="font-display text-4xl font-semibold text-white md:text-5xl">Recent cash flow</h1>
-        <p className="max-w-3xl text-slate-300">
-          This route is wired to the database and scoped to the authenticated user. It is ready for
-          import, manual entry, filtering, and categorization work.
-        </p>
-      </div>
-
-      <div className="glass-panel overflow-hidden rounded-3xl">
-        {transactions.length === 0 ? (
-          <div className="p-8 text-slate-300">
-            No transactions yet. Add the first import or manual entry to start populating the ledger.
-          </div>
-        ) : (
-          <div className="divide-y divide-white/10">
-            {transactions.map((transaction) => (
-              <div key={transaction.id} className="flex flex-col gap-4 px-6 py-5 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <p className="font-semibold text-white">{transaction.description ?? transaction.merchant ?? "Untitled transaction"}</p>
-                  <p className="mt-1 text-sm text-slate-400">
-                    {transaction.category?.name ?? "Uncategorized"} • {transaction.occurredAt.toLocaleDateString()}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className={`font-display text-2xl font-semibold ${transaction.type === "INCOME" ? "text-emerald-300" : "text-rose-300"}`}>
-                    {amountPrefix(transaction.type)}${Number(transaction.amount).toFixed(2)}
-                  </p>
-                  <p className="text-sm text-slate-400">{transaction.type.toLowerCase()}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </section>
+    <TransactionsManager
+      initialTransactions={transactions.map(serializeTransaction)}
+      categories={categories as SerializedCategory[]}
+      selectedCategoryId={selectedCategoryId}
+    />
   );
 }

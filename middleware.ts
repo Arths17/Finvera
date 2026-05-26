@@ -2,7 +2,15 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 
-const protectedRoutes = ["/dashboard", "/transactions", "/budgets", "/settings", "/api/users"];
+const protectedRoutes = [
+  "/dashboard",
+  "/transactions",
+  "/categories",
+  "/budgets",
+  "/settings",
+  "/api/users",
+  "/api/categories"
+];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -31,8 +39,10 @@ export const config = {
   matcher: [
     "/dashboard/:path*",
     "/transactions/:path*",
+    "/categories/:path*",
     "/budgets/:path*",
     "/settings/:path*",
-    "/api/users/:path*"
+    "/api/users/:path*",
+    "/api/categories/:path*"
   ]
 };

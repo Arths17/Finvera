@@ -15,8 +15,7 @@ export default async function BudgetsPage() {
     include: {
       category: {
         select: {
-          name: true,
-          color: true
+          name: true
         }
       }
     },
@@ -49,7 +48,6 @@ export default async function BudgetsPage() {
                   <p className="text-sm uppercase tracking-[0.18em] text-slate-400">{budget.period.toLowerCase()}</p>
                   <h2 className="mt-2 font-display text-2xl font-semibold text-white">{budget.category.name}</h2>
                 </div>
-                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: budget.category.color }} />
               </div>
               <p className="mt-6 font-display text-4xl font-semibold text-white">${Number(budget.amount).toFixed(2)}</p>
               <p className="mt-2 text-sm text-slate-300">

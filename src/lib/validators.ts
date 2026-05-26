@@ -22,6 +22,23 @@ export const categoryCreateSchema = z.object({
 
 export const categoryUpdateSchema = categoryCreateSchema;
 
+const monthSchema = z.coerce.number().int().min(1).max(12);
+const yearSchema = z.coerce.number().int().min(2000).max(2100);
+
+export const budgetCreateSchema = z.object({
+  categoryId: z.preprocess(trimOptionalText, z.string().cuid()),
+  limit: z.coerce.number().positive().max(999999999999.99),
+  month: monthSchema,
+  year: yearSchema
+});
+
+export const budgetUpdateSchema = budgetCreateSchema;
+
+export const budgetQuerySchema = z.object({
+  month: monthSchema.optional(),
+  year: yearSchema.optional()
+});
+
 export const profileUpdateSchema = z
   .object({
     name: z.string().min(2).max(80).optional(),

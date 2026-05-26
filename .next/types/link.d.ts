@@ -34,7 +34,9 @@ declare namespace __next_route_internal_types__ {
   type StaticRoutes = 
     | `/`
     | `/api/auth/register`
+    | `/api/budgets`
     | `/api/categories`
+    | `/api/dashboard/summary`
     | `/api/transactions`
     | `/api/users/me`
     | `/budgets`
@@ -45,6 +47,7 @@ declare namespace __next_route_internal_types__ {
     | `/transactions`
   type DynamicRoutes<T extends string = string> = 
     | `/api/auth/${CatchAllSlug<T>}`
+    | `/api/budgets/${SafeSlug<T>}`
     | `/api/categories/${SafeSlug<T>}`
     | `/api/transactions/${SafeSlug<T>}`
 

@@ -5,14 +5,26 @@ import { useEffect, useState } from "react";
 type DashboardSummary = {
   month: number;
   year: number;
-  state: {
-    label: string;
-    message: string;
-  };
-  totals: {
+  snapshot: {
     income: number;
     expenses: number;
     net: number;
+    savingsRate: number;
+    budgetUtilizationMax: number;
+    categoryConcentration: number;
+    topCategory?: string;
+  };
+  narrative: {
+    mood: "positive" | "neutral" | "warning";
+    headline: string;
+    insight: string;
+    primarySignal: string;
+    secondarySignals: string[];
+    flags: {
+      overspending: boolean;
+      budgetPressure: boolean;
+      concentrationRisk: boolean;
+    };
   };
   highlights: {
     spendingPressure: Array<{
@@ -54,21 +66,21 @@ function formatPercent(value: number) {
 }
 
 function getFinancialTone(summary: DashboardSummary) {
-  if (summary.state.label === "Overspending month") {
+  if (summary.narrative.mood === "warning") {
     return {
       label: "Needs attention",
       className: "border-rose-400/30 bg-rose-400/10 text-rose-100"
     };
   }
 
-  if (summary.state.label === "Unbalanced spending") {
+  if (summary.narrative.mood === "neutral") {
     return {
-      label: "Skewed",
+      label: "Observed",
       className: "border-amber-400/30 bg-amber-400/10 text-amber-50"
     };
   }
 
-  if (summary.state.label === "Strong month") {
+  if (summary.narrative.mood === "positive") {
     return {
       label: "Strong",
       className: "border-emerald-400/30 bg-emerald-400/10 text-emerald-50"
@@ -245,7 +257,7 @@ export default function DashboardClient() {
           </div>
 
           <div className={`inline-flex w-fit items-center rounded-full border px-4 py-2 text-sm font-medium ${financialTone.className}`}>
-            {summary.state.label}
+            {financialTone.label}
           </div>
         </div>
 
@@ -253,14 +265,36 @@ export default function DashboardClient() {
           <div>
             <p className="text-sm uppercase tracking-[0.18em] text-slate-400">Net balance</p>
             <p className="mt-3 font-display text-5xl font-semibold tracking-tight text-white md:text-7xl">
-              {formatMoney(summary.totals.net)}
+              {formatMoney(summary.snapshot.net)}
             </p>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300 md:text-lg">{summary.state.message}</p>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300 md:text-lg">{summary.narrative.headline}</p>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400 md:text-base">{summary.narrative.insight}</p>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:max-w-xl">
-            <MetricPill label="Income" value={formatMoney(summary.totals.income)} tone="text-emerald-300" />
-            <MetricPill label="Expenses" value={formatMoney(summary.totals.expenses)} tone="text-rose-300" />
+            <MetricPill label="Income" value={formatMoney(summary.snapshot.income)} tone="text-emerald-300" />
+            <MetricPill label="Expenses" value={formatMoney(summary.snapshot.expenses)} tone="text-rose-300" />
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+            <div className="rounded-[1.5rem] border border-white/[0.08] bg-white/[0.04] px-4 py-3">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Primary signal</p>
+              <p className="mt-2 font-display text-2xl font-semibold text-white">{summary.narrative.primarySignal}</p>
+            </div>
+
+            <div className="rounded-[1.5rem] border border-white/[0.08] bg-white/[0.04] px-4 py-3">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Supporting signals</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {summary.narrative.secondarySignals.map((signal) => (
+                  <span
+                    key={signal}
+                    className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1 text-sm text-slate-200"
+                  >
+                    {signal}
+                  </span>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>

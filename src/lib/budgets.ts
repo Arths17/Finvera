@@ -5,6 +5,15 @@ export function getCurrentMonthYear(date = new Date()) {
   };
 }
 
+export function shiftMonthYear(month: number, year: number, offset: number) {
+  const shifted = new Date(year, month - 1 + offset, 1);
+
+  return {
+    month: shifted.getMonth() + 1,
+    year: shifted.getFullYear()
+  };
+}
+
 export function getMonthRange(year: number, month: number) {
   const start = new Date(year, month - 1, 1, 0, 0, 0, 0);
   const end = new Date(year, month, 1, 0, 0, 0, 0);

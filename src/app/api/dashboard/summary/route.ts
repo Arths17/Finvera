@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
-import { getCurrentMonthYear, getMonthRange } from "@/lib/budgets";
+import { getCurrentMonthYear, getMonthRange, shiftMonthYear } from "@/lib/budgets";
+import { buildFinancialSnapshot } from "@/lib/financial-snapshot";
+import { buildFinancialSignals } from "@/lib/financial-signals";
+import { buildFinancialSignalMemory } from "@/lib/financial-signal-memory";
+import { resolveSignalDominance } from "@/lib/signal-dominance";
 import { prisma } from "@/lib/prisma";
 import { generateFinancialNarrative } from "@/lib/narrative";
 
@@ -25,48 +29,30 @@ type DashboardCategoryItem = {
 const TOP_CATEGORY_COUNT = 3;
 const TOP_BUDGET_COUNT = 3;
 
+type MonthlyDashboardContext = {
+  month: number;
+  year: number;
+  snapshot: ReturnType<typeof buildFinancialSnapshot>;
+  signals: ReturnType<typeof buildFinancialSignals>;
+  highlights: {
+    spendingPressure: DashboardCategoryItem[];
+    alerts: Array<{
+      id: string;
+      category: {
+        id: string;
+        name: string;
+      };
+      limit: number;
+      spent: number;
+      remaining: number;
+      progress: number;
+      message: string;
+    }>;
+  };
+};
+
 function toMoney(value: number) {
   return Number(value.toFixed(2));
-}
-
-function buildState(input: {
-  net: number;
-  utilization: number;
-  topCategoryShare: number;
-  topCategoryName?: string;
-  topBudgetName?: string;
-}) {
-  const { net, utilization, topCategoryShare, topCategoryName, topBudgetName } = input;
-
-  if (net <= 0) {
-    return {
-      label: "Overspending month",
-      message: topBudgetName
-        ? `Spending is running above income, and ${topBudgetName} is the first constraint to watch.`
-        : "Spending is running above income this month."
-    };
-  }
-
-  if (topCategoryShare > 0.6) {
-    return {
-      label: "Unbalanced spending",
-      message: topCategoryName
-        ? `${topCategoryName} is carrying more than most of your spending, which makes the month feel skewed.`
-        : "One category is carrying too much of the month’s spending."
-    };
-  }
-
-  if (utilization < 50) {
-    return {
-      label: "Strong month",
-      message: "Your income is comfortably ahead of spending, with budget usage still well under control."
-    };
-  }
-
-  return {
-    label: "Healthy but controlled",
-    message: "You’re ahead overall, but enough of the budget is in use that discipline still matters."
-  };
 }
 
 function buildAlertMessage(item: DashboardBudgetItem) {
@@ -83,14 +69,7 @@ async function requireUser() {
   return session?.user?.id ?? null;
 }
 
-export async function GET() {
-  const userId = await requireUser();
-
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { month, year } = getCurrentMonthYear();
+async function loadMonthlyDashboardContext(userId: string, month: number, year: number): Promise<MonthlyDashboardContext> {
   const { start, end } = getMonthRange(year, month);
 
   const [transactions, budgets] = await Promise.all([
@@ -191,10 +170,6 @@ export async function GET() {
     };
   });
 
-  const totalBudget = budgetItems.reduce((total, item) => total + Number(item.limit), 0);
-  const totalSpent = budgetItems.reduce((total, item) => total + Number(item.spent), 0);
-  const utilization = totalBudget <= 0 ? 0 : (totalSpent / totalBudget) * 100;
-
   const topCategories: DashboardCategoryItem[] = Array.from(summary.categories.values())
     .sort((left, right) => right.total - left.total)
     .slice(0, TOP_CATEGORY_COUNT);
@@ -204,42 +179,24 @@ export async function GET() {
     .sort((left, right) => right.progress - left.progress || Number(right.spent) - Number(left.spent))
     .slice(0, TOP_BUDGET_COUNT);
 
-  const state = buildState({
-    net: summary.income - summary.expenses,
-    utilization,
-    topCategoryShare: summary.expenses <= 0 ? 0 : Number(topCategories[0]?.total ?? 0) / summary.expenses,
-    topCategoryName: topCategories[0]?.name,
-    topBudgetName: atRiskBudgets[0]?.category.name
-  });
-
-  const financials = {
-    income: summary.income,
-    expenses: summary.expenses,
-    net: summary.income - summary.expenses
-  };
-
   const budgetUtilizationMax = budgetItems.length === 0 ? 0 : Math.max(...budgetItems.map((b) => b.progress)) / 100;
   const categoryConcentration = summary.expenses <= 0 ? 0 : Number(topCategories[0]?.total ?? 0) / summary.expenses;
 
-  const narrative = generateFinancialNarrative({
-    income: financials.income,
-    expenses: financials.expenses,
-    net: financials.net,
+  const snapshot = buildFinancialSnapshot({
+    income: summary.income,
+    expenses: summary.expenses,
     budgetUtilizationMax,
-    categoryConcentration
+    categoryConcentration,
+    topCategory: topCategories[0]?.name
   });
 
-  return NextResponse.json({
+  const signals = buildFinancialSignals(snapshot);
+
+  return {
     month,
     year,
-    state,
-    financials,
-    narrative,
-    totals: {
-      income: summary.income,
-      expenses: summary.expenses,
-      net: summary.income - summary.expenses
-    },
+    snapshot,
+    signals,
     highlights: {
       spendingPressure: topCategories,
       alerts: atRiskBudgets.map((item) => ({
@@ -251,6 +208,50 @@ export async function GET() {
         progress: item.progress,
         message: buildAlertMessage(item)
       }))
+    }
+  };
+}
+
+export async function GET() {
+  const userId = await requireUser();
+
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { month, year } = getCurrentMonthYear();
+  const historicalPeriods = Array.from({ length: 5 }, (_, index) => shiftMonthYear(month, year, -(index + 1))).reverse();
+
+  const monthlyContexts = await Promise.all(
+    historicalPeriods.map((period) => loadMonthlyDashboardContext(userId, period.month, period.year))
+  );
+  const currentContext = await loadMonthlyDashboardContext(userId, month, year);
+  const signalMemory = buildFinancialSignalMemory([
+    ...monthlyContexts.map((context) => ({
+      month: context.month,
+      year: context.year,
+      signals: context.signals
+    })),
+    {
+      month: currentContext.month,
+      year: currentContext.year,
+      signals: currentContext.signals
+    }
+  ]);
+  const signalSurface = resolveSignalDominance(currentContext.signals, signalMemory.current);
+  const narrative = generateFinancialNarrative(currentContext.snapshot, signalSurface.dominant);
+
+  return NextResponse.json({
+    month,
+    year,
+    snapshot: currentContext.snapshot,
+    signals: currentContext.signals,
+    signalSurface,
+    narrative,
+    signalMemory,
+    highlights: {
+      spendingPressure: currentContext.highlights.spendingPressure,
+      alerts: currentContext.highlights.alerts
     }
   });
 }

@@ -1,12 +1,5 @@
-export type FinancialInputs = {
-  income: number;
-  expenses: number;
-  net: number;
-
-  budgetUtilizationMax: number; // 0..1
-  categoryConcentration: number; // 0..1
-  expenseGrowthRate?: number;
-};
+import type { FinancialSnapshot } from "@/lib/financial-snapshot";
+import { buildFinancialSignals, rankFinancialSignals, type FinancialSignal } from "@/lib/financial-signals";
 
 export type FinancialNarrative = {
   mood: "positive" | "neutral" | "warning";
@@ -24,58 +17,46 @@ export type FinancialNarrative = {
   };
 };
 
-export function generateFinancialNarrative(input: FinancialInputs): FinancialNarrative {
-  const { income, expenses, net, budgetUtilizationMax, categoryConcentration } = input;
+function buildNarrativeFromSignals(snapshot: FinancialSnapshot, signals: FinancialSignal[]): FinancialNarrative {
+  const rankedSignals = rankFinancialSignals(signals);
+  const topSignal = rankedSignals[0];
+  const topCategory = snapshot.topCategory ?? "one category";
 
-  const savingsRate = income > 0 ? net / income : 0;
-  const isOverspending = net < 0;
-  const isHighBudgetPressure = budgetUtilizationMax >= 0.8;
-  const isUnbalanced = categoryConcentration >= 0.5;
-
-  // Mood
   let mood: FinancialNarrative["mood"] = "neutral";
+  if (topSignal?.type === "cashFlowRisk" || topSignal?.type === "budgetPressure" || topSignal?.type === "categoryDominance") {
+    mood = "warning";
+  } else if (topSignal?.type === "savingsMomentum" && topSignal.direction === "improving") {
+    mood = "positive";
+  }
 
-  if (isOverspending) mood = "warning";
-  else if (savingsRate > 0.2 && !isHighBudgetPressure) mood = "positive";
-  else mood = "neutral";
+  let headline = "Income and spending are broadly balanced this month";
+  if (topSignal?.type === "cashFlowRisk") {
+    headline = "Spending is running ahead of income this month";
+  } else if (topSignal?.type === "budgetPressure") {
+    headline = "Several budgets are running close to their limits";
+  } else if (topSignal?.type === "categoryDominance") {
+    headline = `Spending is becoming concentrated in ${topCategory}`;
+  } else if (topSignal?.type === "savingsMomentum") {
+    headline = "Income is comfortably ahead of spending this month";
+  }
 
-  // Headline (strict templates)
-  let headline = "Your finances are stable but watchful";
+  let insight = "No high-confidence signals are currently standing out.";
+  if (topSignal) {
+    insight = topSignal.detail;
+    if (rankedSignals.length > 1) {
+      insight = `${topSignal.detail} ${rankedSignals[1].detail}`;
+    }
+  } else if (snapshot.savingsRate >= 0.2) {
+    insight = "Income is leaving room after spending, while category mix stays broad.";
+  }
 
-  if (isOverspending) headline = "You spent more than you earned this month";
-  else if (mood === "positive") headline = "You’re in a strong financial position this month";
-
-  // Insight (deterministic framing)
-  let insight = "Your spending remains well distributed across categories.";
-
-  if (isOverspending)
-    insight = "Your expenses exceeded income, mainly driven by high spending concentration.";
-  else if (isUnbalanced)
-    insight = "Spending is heavily concentrated in one category this month.";
-  else if (isHighBudgetPressure)
-    insight = "Several budgets are approaching their limits.";
-
-  // Primary signal (priority)
-  let primarySignal = "Healthy financial balance";
-
-  if (isOverspending) primarySignal = "Negative cashflow";
-  else if (isHighBudgetPressure) primarySignal = "Budget pressure increasing";
-  else if (isUnbalanced) primarySignal = "Spending concentration risk";
-
-  // Secondary signals (pick up to 2 relevant)
-  const secondaries: string[] = [];
-
-  if (isUnbalanced) secondaries.push("High category concentration");
-  if (isHighBudgetPressure) secondaries.push("Budget utilization above 80%");
-  if (savingsRate > 0.2) secondaries.push("Positive savings rate");
-  if (secondaries.length === 0) secondaries.push("Stable spending distribution");
-
-  const secondarySignals = secondaries.slice(0, 2);
+  const primarySignal = topSignal?.title ?? "Stable financial balance";
+  const secondarySignals = rankedSignals.slice(1, 4).map((signal) => signal.title);
 
   const flags = {
-    overspending: isOverspending,
-    budgetPressure: isHighBudgetPressure,
-    concentrationRisk: isUnbalanced
+    overspending: rankedSignals.some((signal) => signal.type === "cashFlowRisk"),
+    budgetPressure: rankedSignals.some((signal) => signal.type === "budgetPressure"),
+    concentrationRisk: rankedSignals.some((signal) => signal.type === "categoryDominance")
   };
 
   return {
@@ -86,4 +67,11 @@ export function generateFinancialNarrative(input: FinancialInputs): FinancialNar
     secondarySignals,
     flags
   };
+}
+
+export function generateFinancialNarrative(
+  snapshot: FinancialSnapshot,
+  signals: FinancialSignal[] = buildFinancialSignals(snapshot)
+): FinancialNarrative {
+  return buildNarrativeFromSignals(snapshot, signals);
 }

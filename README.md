@@ -20,6 +20,7 @@ Finvera is an AI-powered personal finance platform built with Next.js, Prisma, P
 - Current-user profile API at `/api/users/me`
 - Prisma models for users, categories, transactions, and budgets
 - Responsive UI foundation with a finance-focused visual design
+- Deterministic financial snapshot and narrative layers for dashboard interpretation
 
 ## Project Structure
 
@@ -28,6 +29,8 @@ Finvera is an AI-powered personal finance platform built with Next.js, Prisma, P
 - `src/app/(protected)` authenticated app shell and product routes
 - `src/app/api/auth` NextAuth and registration routes
 - `src/app/api/users/me` current-user API
+- `src/lib/financial-snapshot.ts` canonical financial snapshot builder and metrics
+- `src/lib/narrative.ts` deterministic snapshot-to-narrative interpreter
 - `src/lib` Prisma client, auth config, password helpers, and schema validators
 - `prisma/schema.prisma` database schema
 
@@ -88,6 +91,8 @@ npm run dev
 - The app currently uses NextAuth credentials auth so it can run without a third-party identity provider.
 - Protected routes are enforced with middleware and server-side session checks.
 - The schema is intentionally user-scoped so transactions, budgets, and future AI features can never leak across accounts.
+- Dashboard behavior now follows a deterministic pipeline: transactions feed a canonical `FinancialSnapshot`, and the snapshot is then interpreted into a separate `FinancialNarrative`.
+- Narrative copy is intentionally observational rather than advisory so the system explains patterns without pretending to prescribe actions.
 
 ## Next Milestones
 
@@ -95,5 +100,5 @@ npm run dev
 - Category management
 - Budget creation and tracking
 - CSV import and export
-- Charts and dashboard analytics
-- AI financial insights and forecasting
+- Temporal context for the snapshot layer, including month-over-month deltas and rolling averages
+- Narrative smoothing and anomaly detection

@@ -23,6 +23,15 @@ export type FinancialSignal = {
   };
   title: string;
   detail: string;
+  meaningVersion?: "v1" | "v2";
+  meaning?: {
+    version: "v1" | "v2";
+    canonicalLabel: string;
+    description: string;
+    aliases: string[];
+    compatibility: "compatible" | "partially compatible" | "breaking";
+    impactScope: "signal-level" | "domain-level" | "system-level";
+  };
 };
 
 function clamp(value: number, min = 0, max = 1) {

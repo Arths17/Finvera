@@ -1,0 +1,93 @@
+{
+  "version": "signal-surface-v1",
+  "scenario": "baseline-stable",
+  "domainMetadata": [
+    "liquidity",
+    "spending",
+    "income",
+    "recurrence",
+    "other"
+  ],
+  "input": {
+    "month": 1,
+    "year": 2026,
+    "snapshot": {
+      "income": 5000,
+      "expenses": 3800,
+      "budgetUtilizationMax": 0.3,
+      "categoryConcentration": 0.2
+    }
+  },
+  "output": {
+    "generatedAt": "2026-01",
+    "domains": {
+      "liquidity": {
+        "dominant": [
+          {
+            "type": "savingsMomentum",
+            "title": "Positive savings rate",
+            "severity": 0.16,
+            "confidence": 0.804,
+            "persistence": 0.548,
+            "direction": "improving",
+            "context": {
+              "delta": 0.04
+            }
+          }
+        ],
+        "secondary": [],
+        "suppressed": [],
+        "conflictingGroups": []
+      },
+      "spending": {
+        "dominant": [],
+        "secondary": [],
+        "suppressed": [],
+        "conflictingGroups": []
+      },
+      "income": {
+        "dominant": [],
+        "secondary": [],
+        "suppressed": [],
+        "conflictingGroups": []
+      },
+      "recurrence": {
+        "dominant": [],
+        "secondary": [],
+        "suppressed": [],
+        "conflictingGroups": []
+      },
+      "other": {
+        "dominant": [],
+        "secondary": [],
+        "suppressed": [],
+        "conflictingGroups": []
+      }
+    },
+    "dominant": [
+      {
+        "type": "savingsMomentum",
+        "title": "Positive savings rate",
+        "severity": 0.16,
+        "confidence": 0.804,
+        "persistence": 0.548,
+        "direction": "improving",
+        "context": {
+          "delta": 0.04
+        }
+      }
+    ],
+    "secondary": [],
+    "suppressed": [],
+    "confidenceDistribution": {
+      "overall": 0.496552,
+      "byDomain": {
+        "liquidity": 0.496552,
+        "spending": 0,
+        "income": 0,
+        "recurrence": 0,
+        "other": 0
+      }
+    }
+  }
+}

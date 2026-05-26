@@ -49,6 +49,38 @@ function clamp(value: number, min = 0, max = 1) {
   return Math.min(max, Math.max(value, min));
 }
 
+function compareStrings(left: string, right: string) {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
+function compareScoredSignals(left: ScoredSignal, right: ScoredSignal) {
+  return (
+    right.dominanceScore - left.dominanceScore ||
+    right.baseScore - left.baseScore ||
+    right.supportScore - left.supportScore ||
+    right.signal.severity - left.signal.severity ||
+    right.signal.confidence - left.signal.confidence ||
+    right.signal.persistence - left.signal.persistence ||
+    compareStrings(left.key, right.key) ||
+    compareStrings(left.signal.title, right.signal.title) ||
+    compareStrings(left.signal.type, right.signal.type)
+  );
+}
+
+function compareSignals(left: FinancialSignal, right: FinancialSignal) {
+  return (
+    scoreFinancialSignal(right) - scoreFinancialSignal(left) ||
+    right.severity - left.severity ||
+    right.confidence - left.confidence ||
+    right.persistence - left.persistence ||
+    compareStrings(getClusterKey(left), getClusterKey(right)) ||
+    compareStrings(left.title, right.title) ||
+    compareStrings(left.type, right.type)
+  );
+}
+
 function getSignalDomain(signal: FinancialSignal): SignalDomain {
   if (signal.type === "cashFlowRisk" || signal.type === "savingsMomentum") {
     return "liquidity";
@@ -112,7 +144,8 @@ function getDominanceScore(signal: FinancialSignal, memory?: FinancialSignalMemo
 
 export function resolveSignalDominance(
   signals: FinancialSignal[],
-  history: FinancialSignalMemory[] = []
+  history: FinancialSignalMemory[] = [],
+  generatedAt = "signal-surface"
 ): SignalSurface {
   const memoryByKey = new Map(history.map((signal) => [getClusterKey(signal), signal]));
   const scoredSignals: ScoredSignal[] = signals.map((signal) => {
@@ -130,9 +163,11 @@ export function resolveSignalDominance(
     };
   });
 
+  const orderedSignals = [...scoredSignals].sort(compareScoredSignals);
+
   const domainGroups = new Map<SignalDomain, ScoredSignal[]>();
 
-  for (const entry of scoredSignals) {
+  for (const entry of orderedSignals) {
     const domain = domainGroups.get(entry.domain) ?? [];
     domain.push(entry);
     domainGroups.set(entry.domain, domain);
@@ -151,8 +186,22 @@ export function resolveSignalDominance(
     const secondary: FinancialSignal[] = [];
     const suppressed: FinancialSignal[] = [];
 
-    for (const cluster of clusterGroups.values()) {
-      const orderedCluster = [...cluster].sort((left, right) => right.dominanceScore - left.dominanceScore);
+    const clusterEntries = [...clusterGroups.entries()].sort(([leftKey, leftCluster], [rightKey, rightCluster]) => {
+      const leftWinner = [...leftCluster].sort(compareScoredSignals)[0];
+      const rightWinner = [...rightCluster].sort(compareScoredSignals)[0];
+
+      if (leftWinner && rightWinner) {
+        return compareScoredSignals(leftWinner, rightWinner) || compareStrings(leftKey, rightKey);
+      }
+
+      if (leftWinner) return -1;
+      if (rightWinner) return 1;
+
+      return compareStrings(leftKey, rightKey);
+    });
+
+    for (const [, cluster] of clusterEntries) {
+      const orderedCluster = [...cluster].sort(compareScoredSignals);
       const [winner, ...rest] = orderedCluster;
 
       if (!winner) continue;
@@ -171,7 +220,7 @@ export function resolveSignalDominance(
     const dominantKeys = new Set(dominant.map(getClusterKey));
     const secondaryCandidates = entries
       .filter((entry) => !dominantKeys.has(entry.key) && !suppressed.includes(entry.signal))
-      .sort((left, right) => right.dominanceScore - left.dominanceScore);
+      .sort(compareScoredSignals);
 
     for (const candidate of secondaryCandidates) {
       if (candidate.dominanceScore >= 0.4) secondary.push(candidate.signal);
@@ -182,7 +231,7 @@ export function resolveSignalDominance(
 
     const polarities = new Set(entries.map((entry) => entry.polarity));
     if (polarities.size >= 2) {
-      const ordered = [...entries].sort((left, right) => right.dominanceScore - left.dominanceScore);
+      const ordered = [...entries].sort(compareScoredSignals);
 
       conflictingGroups.push({
         domain: entries[0].domain,
@@ -206,9 +255,9 @@ export function resolveSignalDominance(
     };
 
     return {
-      dominant: uniqueByCluster(dominant).sort((left, right) => scoreFinancialSignal(right) - scoreFinancialSignal(left)),
-      secondary: uniqueByCluster(secondary).sort((left, right) => scoreFinancialSignal(right) - scoreFinancialSignal(left)),
-      suppressed: uniqueByCluster(suppressed).sort((left, right) => scoreFinancialSignal(right) - scoreFinancialSignal(left)),
+      dominant: uniqueByCluster(dominant).sort(compareSignals),
+      secondary: uniqueByCluster(secondary).sort(compareSignals),
+      suppressed: uniqueByCluster(suppressed).sort(compareSignals),
       conflictingGroups
     };
   }
@@ -250,11 +299,11 @@ export function resolveSignalDominance(
   }
 
   return {
-    generatedAt: new Date().toISOString(),
+    generatedAt,
     domains,
-    dominant: uniqueByClusterGlobal(allDominant).sort((left, right) => scoreFinancialSignal(right) - scoreFinancialSignal(left)),
-    secondary: uniqueByClusterGlobal(allSecondary).sort((left, right) => scoreFinancialSignal(right) - scoreFinancialSignal(left)),
-    suppressed: uniqueByClusterGlobal(allSuppressed).sort((left, right) => scoreFinancialSignal(right) - scoreFinancialSignal(left)),
+    dominant: uniqueByClusterGlobal(allDominant).sort(compareSignals),
+    secondary: uniqueByClusterGlobal(allSecondary).sort(compareSignals),
+    suppressed: uniqueByClusterGlobal(allSuppressed).sort(compareSignals),
     confidenceDistribution: {
       overall: overallMean,
       byDomain

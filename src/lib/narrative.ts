@@ -22,6 +22,8 @@ function buildNarrativeFromSignals(snapshot: FinancialSnapshot, signals: Financi
   const topSignal = rankedSignals[0];
   const topCategory = snapshot.topCategory ?? "one category";
 
+  const explainSignal = (signal?: FinancialSignal) => signal?.meaning?.description ?? signal?.detail ?? "";
+
   let mood: FinancialNarrative["mood"] = "neutral";
   if (topSignal?.type === "cashFlowRisk" || topSignal?.type === "budgetPressure" || topSignal?.type === "categoryDominance") {
     mood = "warning";
@@ -42,9 +44,9 @@ function buildNarrativeFromSignals(snapshot: FinancialSnapshot, signals: Financi
 
   let insight = "No high-confidence signals are currently standing out.";
   if (topSignal) {
-    insight = topSignal.detail;
+    insight = explainSignal(topSignal);
     if (rankedSignals.length > 1) {
-      insight = `${topSignal.detail} ${rankedSignals[1].detail}`;
+      insight = `${explainSignal(topSignal)} ${explainSignal(rankedSignals[1])}`;
     }
   } else if (snapshot.savingsRate >= 0.2) {
     insight = "Income is leaving room after spending, while category mix stays broad.";

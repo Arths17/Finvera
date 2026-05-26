@@ -238,7 +238,7 @@ export async function GET() {
       signals: currentContext.signals
     }
   ]);
-  const signalSurface = resolveSignalDominance(currentContext.signals, signalMemory.current);
+  const signalSurface = resolveSignalDominance(currentContext.signals, signalMemory.current, `${year}-${month.toString().padStart(2, "0")}`);
   const narrative = generateFinancialNarrative(currentContext.snapshot, signalSurface.dominant);
 
   return NextResponse.json({

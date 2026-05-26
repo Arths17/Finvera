@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -47,7 +47,7 @@ model Transaction {
   userId       String
   categoryId   String
   type         TransactionType
-  amount       Decimal         @db.Decimal(14, 2)
+  amount       Decimal
   description  String?
   merchant     String?
   occurredAt   DateTime
@@ -65,7 +65,7 @@ model Budget {
   id          String        @id @default(cuid())
   userId      String
   categoryId  String
-  limit       Decimal       @db.Decimal(14, 2)
+  limit       Decimal
   month       Int
   year        Int
   createdAt   DateTime      @default(now())

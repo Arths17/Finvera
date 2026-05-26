@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getCurrentMonthYear, getMonthRange } from "@/lib/budgets";
 import { prisma } from "@/lib/prisma";
+import { generateFinancialNarrative } from "@/lib/narrative";
 
 type DashboardBudgetItem = {
   id: string;
@@ -211,10 +212,29 @@ export async function GET() {
     topBudgetName: atRiskBudgets[0]?.category.name
   });
 
+  const financials = {
+    income: summary.income,
+    expenses: summary.expenses,
+    net: summary.income - summary.expenses
+  };
+
+  const budgetUtilizationMax = budgetItems.length === 0 ? 0 : Math.max(...budgetItems.map((b) => b.progress)) / 100;
+  const categoryConcentration = summary.expenses <= 0 ? 0 : Number(topCategories[0]?.total ?? 0) / summary.expenses;
+
+  const narrative = generateFinancialNarrative({
+    income: financials.income,
+    expenses: financials.expenses,
+    net: financials.net,
+    budgetUtilizationMax,
+    categoryConcentration
+  });
+
   return NextResponse.json({
     month,
     year,
     state,
+    financials,
+    narrative,
     totals: {
       income: summary.income,
       expenses: summary.expenses,
